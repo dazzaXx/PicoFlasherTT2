@@ -1,0 +1,50 @@
+name: Build PicoFlasherTT2
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+  workflow_dispatch: # Allows you to manually trigger the build from the GitHub UI
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Install ARM GNU Toolchain
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y gcc-arm-none-eabi libnewlib-arm-none-eabi build-essential python3
+
+    - name: Setup Raspberry Pi Pico SDK
+      env:
+        PICO_SDK_URL: https://github.com/raspberrypi/pico-sdk.git
+      run: |
+        # Clone the SDK into the runner's home directory
+        git clone --depth 1 --branch master $PICO_SDK_URL $HOME/pico-sdk
+        cd $HOME/pico-sdk
+        # Initialize submodules (required for tinyusb, etc.)
+        git submodule update --init
+
+    - name: Configure CMake
+      env:
+        PICO_SDK_PATH: ${{ runner.temp }}/../pico-sdk
+      run: |
+        # Create the build directory and configure the project
+        cmake -S . -B build -DPICO_SDK_PATH=$HOME/pico-sdk
+
+    - name: Build Firmware
+      run: |
+        # Compile the project using all available CPU cores on the runner
+        cmake --build build --parallel $(nproc)
+
+    - name: Upload UF2 Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: PicoFlasher-Firmware
+        path: build/*.uf2
+        if-no-files-found: error
