@@ -1,11 +1,11 @@
-name: Build PicoFlasherTT2
+name: Build PicoFlasher
 
 on:
   push:
     branches: [ "main", "master" ]
   pull_request:
     branches: [ "main", "master" ]
-  workflow_dispatch: # Allows you to manually trigger the build from the GitHub UI
+  workflow_dispatch: 
 
 jobs:
   build:
@@ -21,25 +21,28 @@ jobs:
         sudo apt-get install -y gcc-arm-none-eabi libnewlib-arm-none-eabi build-essential python3
 
     - name: Setup Raspberry Pi Pico SDK
-      env:
-        PICO_SDK_URL: https://github.com/raspberrypi/pico-sdk.git
       run: |
         # Clone the SDK into the runner's home directory
-        git clone --depth 1 --branch master $PICO_SDK_URL $HOME/pico-sdk
+        git clone --depth 1 --branch master https://github.com/raspberrypi/pico-sdk.git $HOME/pico-sdk
         cd $HOME/pico-sdk
-        # Initialize submodules (required for tinyusb, etc.)
+        # Initialize submodules (required for tinyusb)
         git submodule update --init
+        # Globally export the SDK path so CMake can find it in later steps
+        echo "PICO_SDK_PATH=$HOME/pico-sdk" >> $GITHUB_ENV
+
+    - name: Copy SDK Import Script (Failsafe)
+      run: |
+        # Copies the required import script into the project root
+        cp $HOME/pico-sdk/external/pico_sdk_import.cmake .
 
     - name: Configure CMake
-      env:
-        PICO_SDK_PATH: ${{ runner.temp }}/../pico-sdk
       run: |
         # Create the build directory and configure the project
-        cmake -S . -B build -DPICO_SDK_PATH=$HOME/pico-sdk
+        cmake -S . -B build
 
     - name: Build Firmware
       run: |
-        # Compile the project using all available CPU cores on the runner
+        # Compile the project using all available CPU cores
         cmake --build build --parallel $(nproc)
 
     - name: Upload UF2 Artifact
