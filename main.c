@@ -411,9 +411,6 @@ int main(void)
 	uart_bridge_init(CDC_KER_DBG, uart0, UART0_TX, UART0_RX);
 	uart_bridge_init(CDC_SMC_DBG, uart1, UART1_TX, UART1_RX);
 
-	gpio_init(I2C1_SDA);
-	gpio_init(I2C1_SCL);
-
 	while (1)
 	{
 		tud_task();
