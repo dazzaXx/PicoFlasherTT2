@@ -32,24 +32,6 @@
 #define CDC_KER_DBG 1
 #define CDC_SMC_DBG 2
 
-#define LED_PIN 25
-
-void led_blink(void)
-{
-	static uint32_t start_ms = 0;
-	static bool led_state = false;
-
-	uint32_t now = board_millis();
-
-	if (now - start_ms < 50)
-		return;
-
-	start_ms = now;
-
-	gpio_put(LED_PIN, led_state);
-	led_state = 1 - led_state;
-}
-
 #define GET_VERSION 0x00
 #define GET_FLASH_CONFIG 0x01
 #define READ_FLASH 0x02
@@ -427,9 +409,6 @@ void tud_cdc_line_coding_cb(uint8_t cdc_id, const cdc_line_coding_t *line_coding
 
 int main(void)
 {
-	gpio_init(LED_PIN);
-	gpio_set_dir(LED_PIN, GPIO_OUT);
-
 	tusb_init();
 	xbox_init();
 	uart_bridge_init(CDC_KER_DBG, uart0, UART0_TX, UART0_RX);
