@@ -129,8 +129,6 @@ static bool enable_smc_workaround = true;
 
 static void pico_flasher_rx_cb(uint8_t cdc_id)
 {
-	led_blink();
-
 	uint32_t avilable_data = tud_cdc_n_available(cdc_id);
 
 	uint32_t needed_data = sizeof(struct cmd);
@@ -387,8 +385,7 @@ void tud_cdc_rx_cb(uint8_t cdc_id)
 
 void tud_cdc_tx_complete_cb(uint8_t cdc_id)
 {
-	if (cdc_id == CDC_PICO_FLASHER)
-		led_blink();
+	if (cdc_id == CDC_PICO_FLASHER);
 }
 
 void tud_cdc_line_coding_cb(uint8_t cdc_id, const cdc_line_coding_t *line_coding)
