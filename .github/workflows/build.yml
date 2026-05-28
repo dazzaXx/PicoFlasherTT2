@@ -1,4 +1,4 @@
-name: Build PicoFlasher
+name: Build PicoFlasherTT2
 
 on:
   push:
