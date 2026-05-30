@@ -30,7 +30,7 @@
 #include "ws2812.pio.h"
 
 #define WS2812_PIN 16
-#define WS2812_COLOR urgb_u32(0, 30, 0)
+#define WS2812_COLOR urgb_u32(100, 0, 0)
 #define IS_RGBW false
 
 // Helper function to send RGB values to the PIO
@@ -43,26 +43,31 @@ static inline uint32_t urgb_u32(uint8_t r, uint8_t g, uint8_t b) {
     return ((uint32_t) (r) << 8) | ((uint32_t) (g) << 16) | (uint32_t) (b);
 }
 
-// Non-blocking blink task
-// interval_ms dictates how fast the LED blinks
-void ws2812_blink_task(uint32_t interval_ms) {
-    // static variables persist their values across multiple calls to this function
-    static uint32_t last_blink_time = 0;
-    static bool led_state = false;
+// --- Variables to track activity state ---
+static uint32_t last_usb_activity_us = 0;
+static bool activity_led_on = false;
+
+// --- 1. The Trigger (Call this in RX/TX callbacks) ---
+void ws2812_trigger_activity(void) {
+    last_usb_activity_us = time_us_32(); // Reset the inactivity timer
     
-    uint32_t current_time = time_us_32();
-    
-    // Check if the interval (converted to microseconds) has passed
-    if (current_time - last_blink_time > (interval_ms * 1000)) {
-        led_state = !led_state; // Toggle state
-        
-        if (led_state) {
-            put_pixel(WS2812_COLOR); // Low-brightness green
-        } else {
-            put_pixel(0); // Off
+    // Only update the PIO hardware if the LED is currently off.
+    // This prevents spamming the WS2812 with commands on every single byte.
+    if (!activity_led_on) {
+        put_pixel(WS2812_COLOR); // Turn ON
+        activity_led_on = true;
+    }
+}
+
+// --- 2. The Watcher (Call this in your while(1) loop) ---
+void ws2812_activity_task(void) {
+    // If the LED is on, check if it's time to turn it off
+    if (activity_led_on) {
+        // 50000 microseconds = 50ms of inactivity required to turn off
+        if (time_us_32() - last_usb_activity_us > 50000) { 
+            put_pixel(0); // Turn OFF
+            activity_led_on = false;
         }
-        
-        last_blink_time = current_time; // Reset the timer
     }
 }
 
@@ -167,7 +172,7 @@ static bool enable_smc_workaround = true;
 
 static void pico_flasher_rx_cb(uint8_t cdc_id)
 {
-	ws2812_blink_task(50);
+	ws2812_trigger_activity();
 	
 	uint32_t avilable_data = tud_cdc_n_available(cdc_id);
 
@@ -426,7 +431,7 @@ void tud_cdc_rx_cb(uint8_t cdc_id)
 void tud_cdc_tx_complete_cb(uint8_t cdc_id)
 {
 	if (cdc_id == CDC_PICO_FLASHER)
-		ws2812_blink_task(50);
+		ws2812_trigger_activity();
 }
 
 void tud_cdc_line_coding_cb(uint8_t cdc_id, const cdc_line_coding_t *line_coding)
@@ -464,6 +469,8 @@ int main(void)
 		pico_flasher_stream(CDC_PICO_FLASHER);
 		uart_bridge_task(CDC_KER_DBG, uart0);
 		uart_bridge_task(CDC_SMC_DBG, uart1);
+
+		ws2812_activity_task();
 	}
 
 	return 0;
