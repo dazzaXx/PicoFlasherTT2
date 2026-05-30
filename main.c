@@ -30,9 +30,9 @@
 #include "ws2812.pio.h"
 
 #define WS2812_PIN 16
-#define WS2812_COLOR_TX urgb_u32(255, 60, 0)
-#define WS2812_COLOR_RX urgb_u32(0, 255, 0)
-#define WS2812_COLOR_IDLE urgb_u32(255, 255, 255)
+#define WS2812_COLOR_TX 255, 60, 0
+#define WS2812_COLOR_RX 0, 255, 0
+#define WS2812_COLOR_IDLE 255, 255, 255
 #define IS_RGBW false
 
 static PIO ws2812_pio = pio1;
@@ -69,7 +69,7 @@ void ws2812_activity_task(void) {
 
     // 1. Detect if the USB was just plugged in/enumerated by the PC
     if (is_mounted && !was_mounted) {
-        put_pixel(WS2812_COLOR_IDLE); // Set to idle color immediately upon connection
+        put_pixel(urgb_u32(WS2812_COLOR_IDLE)); // Set to idle color immediately upon connection
         was_mounted = true;
     } 
     // Detect if the USB was disconnected (e.g., PC went to sleep)
@@ -86,7 +86,7 @@ void ws2812_activity_task(void) {
     if (is_transferring && (current_time - last_usb_activity_us > 100000)) {
         is_transferring = false;
         led_physical_state = false;
-        put_pixel(WS2812_COLOR_IDLE); // Revert to IDLE color instead of turning OFF
+        put_pixel(urgb_u32(WS2812_COLOR_IDLE)); // Revert to IDLE color instead of turning OFF
         return;
     }
 
@@ -210,7 +210,7 @@ static bool enable_smc_workaround = true;
 
 static void pico_flasher_rx_cb(uint8_t cdc_id)
 {
-	ws2812_trigger_activity(WS2812_COLOR_RX);
+	ws2812_trigger_activity(urgb_u32(WS2812_COLOR_RX));
 	
 	uint32_t avilable_data = tud_cdc_n_available(cdc_id);
 
@@ -469,7 +469,7 @@ void tud_cdc_rx_cb(uint8_t cdc_id)
 void tud_cdc_tx_complete_cb(uint8_t cdc_id)
 {
 	if (cdc_id == CDC_PICO_FLASHER)
-		ws2812_trigger_activity(WS2812_COLOR_TX);
+		ws2812_trigger_activity(urgb_u32(WS2812_COLOR_TX));
 }
 
 void tud_cdc_line_coding_cb(uint8_t cdc_id, const cdc_line_coding_t *line_coding)
