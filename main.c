@@ -27,6 +27,84 @@
 #include "xbox.h"
 #include "isd1200.h"
 #include "pins.h"
+#include "ws2812.pio.h"
+
+#define WS2812_PIN 16
+#define WS2812_COLOR_TX urgb_u32(255, 60, 0)
+#define WS2812_COLOR_RX urgb_u32(0, 255, 0)
+#define WS2812_COLOR_IDLE urgb_u32(255, 255, 255)
+#define IS_RGBW false
+
+// Helper function to send RGB values to the PIO
+static inline void put_pixel(uint32_t pixel_grb) {
+    pio_sm_put_blocking(pio0, 0, pixel_grb << 8u);
+}
+
+static inline uint32_t urgb_u32(uint8_t r, uint8_t g, uint8_t b) {
+    return ((uint32_t) (r) << 16) | ((uint32_t) (g) << 8) | (uint32_t) (b);
+}
+
+// --- Variables to track activity and blink state ---
+static uint32_t last_usb_activity_us = 0;
+static uint32_t last_blink_toggle_us = 0;
+static bool is_transferring = false;
+static bool led_physical_state = false;
+static uint32_t current_blink_color = 0; 
+static bool was_mounted = false;
+
+void ws2812_trigger_activity(uint32_t color) {
+    last_usb_activity_us = time_us_32(); 
+    is_transferring = true;
+    current_blink_color = color; 
+}
+
+void ws2812_activity_task(void) {
+    uint32_t current_time = time_us_32();
+    
+    // Ask TinyUSB if the host PC has successfully mounted the device
+    bool is_mounted = tud_mounted(); 
+
+    // 1. Detect if the USB was just plugged in/enumerated by the PC
+    if (is_mounted && !was_mounted) {
+        put_pixel(WS2812_COLOR_IDLE); // Set to idle color immediately upon connection
+        was_mounted = true;
+    } 
+    // Detect if the USB was disconnected (e.g., PC went to sleep)
+    else if (!is_mounted && was_mounted) {
+        put_pixel(0); // Turn off entirely
+        was_mounted = false;
+        is_transferring = false;
+    }
+
+    // If we aren't connected to a host, don't try to process blink tasks
+    if (!is_mounted) return;
+
+    // 2. Check for transfer completion (Timeout)
+    if (is_transferring && (current_time - last_usb_activity_us > 100000)) {
+        is_transferring = false;
+        led_physical_state = false;
+        put_pixel(WS2812_COLOR_IDLE); // Revert to IDLE color instead of turning OFF
+        return;
+    }
+
+    // 3. Blink cycle during active transfer
+    if (is_transferring) {
+        if (current_time - last_blink_toggle_us > 50000) {
+            led_physical_state = !led_physical_state; 
+            
+            if (led_physical_state) {
+                put_pixel(current_blink_color); 
+            } else {
+                // NOTE: We still blink to OFF (0) rather than blinking to IDLE.
+                // Blinking between Color and OFF creates a much sharper, high-contrast 
+                // activity flash than blinking between two different colors.
+                put_pixel(0);             
+            }
+            
+            last_blink_toggle_us = current_time; 
+        }
+    }
+}
 
 #define CDC_PICO_FLASHER 0
 #define CDC_KER_DBG 1
@@ -129,6 +207,8 @@ static bool enable_smc_workaround = true;
 
 static void pico_flasher_rx_cb(uint8_t cdc_id)
 {
+	ws2812_trigger_activity(WS2812_COLOR_RX);
+	
 	uint32_t avilable_data = tud_cdc_n_available(cdc_id);
 
 	uint32_t needed_data = sizeof(struct cmd);
@@ -385,7 +465,8 @@ void tud_cdc_rx_cb(uint8_t cdc_id)
 
 void tud_cdc_tx_complete_cb(uint8_t cdc_id)
 {
-	if (cdc_id == CDC_PICO_FLASHER);
+	if (cdc_id == CDC_PICO_FLASHER)
+		ws2812_trigger_activity(WS2812_COLOR_TX);
 }
 
 void tud_cdc_line_coding_cb(uint8_t cdc_id, const cdc_line_coding_t *line_coding)
@@ -411,12 +492,20 @@ int main(void)
 	uart_bridge_init(CDC_KER_DBG, uart0, UART0_TX, UART0_RX);
 	uart_bridge_init(CDC_SMC_DBG, uart1, UART1_TX, UART1_RX);
 
+// Initialize the WS2812 PIO
+    PIO pio = pio0;
+    int sm = 0;
+    uint offset = pio_add_program(pio, &ws2812_program);
+    ws2812_program_init(pio, sm, offset, WS2812_PIN, 800000, IS_RGBW);
+	
 	while (1)
 	{
 		tud_task();
 		pico_flasher_stream(CDC_PICO_FLASHER);
 		uart_bridge_task(CDC_KER_DBG, uart0);
 		uart_bridge_task(CDC_SMC_DBG, uart1);
+
+		ws2812_activity_task();
 	}
 
 	return 0;
