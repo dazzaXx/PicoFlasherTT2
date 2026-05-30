@@ -30,7 +30,9 @@
 #include "ws2812.pio.h"
 
 #define WS2812_PIN 16
-#define WS2812_COLOR urgb_u32(100, 0, 0)
+#define WS2812_COLOR_TX urgb_u32(255, 0, 0)
+#define WS2812_COLOR_RX urgb_u32(255, 0, 255)
+#define WS2812_COLOR_IDLE urgb_u32(125, 255, 0)
 #define IS_RGBW false
 
 // Helper function to send RGB values to the PIO
@@ -43,30 +45,64 @@ static inline uint32_t urgb_u32(uint8_t r, uint8_t g, uint8_t b) {
     return ((uint32_t) (r) << 8) | ((uint32_t) (g) << 16) | (uint32_t) (b);
 }
 
-// --- Variables to track activity state ---
+// --- Variables to track activity and blink state ---
 static uint32_t last_usb_activity_us = 0;
-static bool activity_led_on = false;
+static uint32_t last_blink_toggle_us = 0;
+static bool is_transferring = false;
+static bool led_physical_state = false;
+static uint32_t current_blink_color = 0; 
+static bool was_mounted = false;
 
-// --- 1. The Trigger (Call this in RX/TX callbacks) ---
-void ws2812_trigger_activity(void) {
-    last_usb_activity_us = time_us_32(); // Reset the inactivity timer
-    
-    // Only update the PIO hardware if the LED is currently off.
-    // This prevents spamming the WS2812 with commands on every single byte.
-    if (!activity_led_on) {
-        put_pixel(WS2812_COLOR); // Turn ON
-        activity_led_on = true;
-    }
+void ws2812_trigger_activity(uint32_t color) {
+    last_usb_activity_us = time_us_32(); 
+    is_transferring = true;
+    current_blink_color = color; 
 }
 
-// --- 2. The Watcher (Call this in your while(1) loop) ---
 void ws2812_activity_task(void) {
-    // If the LED is on, check if it's time to turn it off
-    if (activity_led_on) {
-        // 50000 microseconds = 50ms of inactivity required to turn off
-        if (time_us_32() - last_usb_activity_us > 50000) { 
-            put_pixel(0); // Turn OFF
-            activity_led_on = false;
+    uint32_t current_time = time_us_32();
+    
+    // Ask TinyUSB if the host PC has successfully mounted the device
+    bool is_mounted = tud_mounted(); 
+
+    // 1. Detect if the USB was just plugged in/enumerated by the PC
+    if (is_mounted && !was_mounted) {
+        put_pixel(WS2812_COLOR_IDLE); // Set to idle color immediately upon connection
+        was_mounted = true;
+    } 
+    // Detect if the USB was disconnected (e.g., PC went to sleep)
+    else if (!is_mounted && was_mounted) {
+        put_pixel(0); // Turn off entirely
+        was_mounted = false;
+        is_transferring = false;
+    }
+
+    // If we aren't connected to a host, don't try to process blink tasks
+    if (!is_mounted) return;
+
+    // 2. Check for transfer completion (Timeout)
+    if (is_transferring && (current_time - last_usb_activity_us > 100000)) {
+        is_transferring = false;
+        led_physical_state = false;
+        put_pixel(WS2812_COLOR_IDLE); // Revert to IDLE color instead of turning OFF
+        return;
+    }
+
+    // 3. Blink cycle during active transfer
+    if (is_transferring) {
+        if (current_time - last_blink_toggle_us > 50000) {
+            led_physical_state = !led_physical_state; 
+            
+            if (led_physical_state) {
+                put_pixel(current_blink_color); 
+            } else {
+                // NOTE: We still blink to OFF (0) rather than blinking to IDLE.
+                // Blinking between Color and OFF creates a much sharper, high-contrast 
+                // activity flash than blinking between two different colors.
+                put_pixel(0);             
+            }
+            
+            last_blink_toggle_us = current_time; 
         }
     }
 }
@@ -172,7 +208,7 @@ static bool enable_smc_workaround = true;
 
 static void pico_flasher_rx_cb(uint8_t cdc_id)
 {
-	ws2812_trigger_activity();
+	ws2812_trigger_activity(WS2812_COLOR_RX);
 	
 	uint32_t avilable_data = tud_cdc_n_available(cdc_id);
 
@@ -431,7 +467,7 @@ void tud_cdc_rx_cb(uint8_t cdc_id)
 void tud_cdc_tx_complete_cb(uint8_t cdc_id)
 {
 	if (cdc_id == CDC_PICO_FLASHER)
-		ws2812_trigger_activity();
+		ws2812_trigger_activity(WS2812_COLOR_TX);
 }
 
 void tud_cdc_line_coding_cb(uint8_t cdc_id, const cdc_line_coding_t *line_coding)
