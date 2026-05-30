@@ -31,8 +31,8 @@
 
 #define WS2812_PIN 16
 #define WS2812_COLOR_TX urgb_u32(255, 0, 0)
-#define WS2812_COLOR_RX urgb_u32(255, 0, 255)
-#define WS2812_COLOR_IDLE urgb_u32(125, 255, 0)
+#define WS2812_COLOR_RX urgb_u32(255, 125, 0)
+#define WS2812_COLOR_IDLE urgb_u32(255, 255, 255)
 #define IS_RGBW false
 
 // Helper function to send RGB values to the PIO
