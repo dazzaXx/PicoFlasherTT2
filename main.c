@@ -27,6 +27,11 @@
 #include "xbox.h"
 #include "isd1200.h"
 #include "pins.h"
+#include "ws2812.pio.h"
+
+#define WS2812_PIN 16
+#define WS2812_COLOR urgb_u32(0, 30, 0)
+#define IS_RGBW false
 
 #define CDC_PICO_FLASHER 0
 #define CDC_KER_DBG 1
@@ -129,6 +134,8 @@ static bool enable_smc_workaround = true;
 
 static void pico_flasher_rx_cb(uint8_t cdc_id)
 {
+	ws2812_blink_task();
+	
 	uint32_t avilable_data = tud_cdc_n_available(cdc_id);
 
 	uint32_t needed_data = sizeof(struct cmd);
@@ -376,6 +383,39 @@ static void uart_bridge_task(uint8_t cdc_id, uart_inst_t *uart)
 	tud_cdc_n_write_flush(cdc_id);
 }
 
+// Helper function to send RGB values to the PIO
+static inline void put_pixel(uint32_t pixel_grb) {
+    pio_sm_put_blocking(pio0, 0, pixel_grb << 8u);
+}
+
+// Helper to format standard RGB to the WS2812 GRB format
+static inline uint32_t urgb_u32(uint8_t r, uint8_t g, uint8_t b) {
+    return ((uint32_t) (r) << 8) | ((uint32_t) (g) << 16) | (uint32_t) (b);
+}
+
+// Non-blocking blink task
+// interval_ms dictates how fast the LED blinks
+void ws2812_blink_task(uint32_t interval_ms) {
+    // static variables persist their values across multiple calls to this function
+    static uint32_t last_blink_time = 0;
+    static bool led_state = false;
+    
+    uint32_t current_time = time_us_32();
+    
+    // Check if the interval (converted to microseconds) has passed
+    if (current_time - last_blink_time > (interval_ms * 1000)) {
+        led_state = !led_state; // Toggle state
+        
+        if (led_state) {
+            put_pixel(WS2812_COLOR); // Low-brightness green
+        } else {
+            put_pixel(0); // Off
+        }
+        
+        last_blink_time = current_time; // Reset the timer
+    }
+}
+
 // Invoked when CDC interface received data from host
 void tud_cdc_rx_cb(uint8_t cdc_id)
 {
@@ -385,7 +425,8 @@ void tud_cdc_rx_cb(uint8_t cdc_id)
 
 void tud_cdc_tx_complete_cb(uint8_t cdc_id)
 {
-	if (cdc_id == CDC_PICO_FLASHER);
+	if (cdc_id == CDC_PICO_FLASHER)
+		ws2812_blink_task();
 }
 
 void tud_cdc_line_coding_cb(uint8_t cdc_id, const cdc_line_coding_t *line_coding)
@@ -411,6 +452,12 @@ int main(void)
 	uart_bridge_init(CDC_KER_DBG, uart0, UART0_TX, UART0_RX);
 	uart_bridge_init(CDC_SMC_DBG, uart1, UART1_TX, UART1_RX);
 
+// Initialize the WS2812 PIO
+    PIO pio = pio0;
+    int sm = 0;
+    uint offset = pio_add_program(pio, &ws2812_program);
+    ws2812_program_init(pio, sm, offset, WS2812_PIN, 800000, IS_RGBW);
+	
 	while (1)
 	{
 		tud_task();
