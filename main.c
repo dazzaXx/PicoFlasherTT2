@@ -40,7 +40,6 @@ static inline void put_pixel(uint32_t pixel_grb) {
     pio_sm_put_blocking(pio0, 0, pixel_grb << 8u);
 }
 
-// Helper to format standard RGB to the WS2812 GRB format
 static inline uint32_t urgb_u32(uint8_t r, uint8_t g, uint8_t b) {
     return ((uint32_t) (r) << 16) | ((uint32_t) (g) << 8) | (uint32_t) (b);
 }
