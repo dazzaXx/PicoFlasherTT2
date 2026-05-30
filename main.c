@@ -35,9 +35,12 @@
 #define WS2812_COLOR_IDLE urgb_u32(255, 255, 255)
 #define IS_RGBW false
 
+static PIO ws2812_pio = pio1;
+static uint ws2812_sm = 0;
+
 // Helper function to send RGB values to the PIO
 static inline void put_pixel(uint32_t pixel_grb) {
-    pio_sm_put_blocking(pio0, 0, pixel_grb << 8u);
+    pio_sm_put_blocking(ws2812_pio, ws2812_sm, pixel_grb << 8u);
 }
 
 static inline uint32_t urgb_u32(uint8_t r, uint8_t g, uint8_t b) {
@@ -493,10 +496,10 @@ int main(void)
 	uart_bridge_init(CDC_SMC_DBG, uart1, UART1_TX, UART1_RX);
 
 // Initialize the WS2812 PIO
-    PIO pio = pio0;
-    int sm = 0;
-    uint offset = pio_add_program(pio, &ws2812_program);
-    ws2812_program_init(pio, sm, offset, WS2812_PIN, 800000, IS_RGBW);
+    ws2812_pio = pio1;
+    ws2812_sm = pio_claim_unused_sm(ws2812_pio, true);
+    uint offset = pio_add_program(ws2812_pio, &ws2812_program);
+    ws2812_program_init(ws2812_pio, ws2812_sm, offset, WS2812_PIN, 800000, IS_RGBW);
 	
 	while (1)
 	{
