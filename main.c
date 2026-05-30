@@ -30,8 +30,8 @@
 #include "ws2812.pio.h"
 
 #define WS2812_PIN 16
-#define WS2812_COLOR_TX urgb_u32(255, 30, 0)
-#define WS2812_COLOR_RX urgb_u32(255, 0, 0)
+#define WS2812_COLOR_TX urgb_u32(255, 60, 0)
+#define WS2812_COLOR_RX urgb_u32(0, 255, 0)
 #define WS2812_COLOR_IDLE urgb_u32(255, 255, 255)
 #define IS_RGBW false
 
@@ -42,7 +42,7 @@ static inline void put_pixel(uint32_t pixel_grb) {
 
 // Helper to format standard RGB to the WS2812 GRB format
 static inline uint32_t urgb_u32(uint8_t r, uint8_t g, uint8_t b) {
-    return ((uint32_t) (r) << 8) | ((uint32_t) (g) << 16) | (uint32_t) (b);
+    return ((uint32_t) (r) << 16) | ((uint32_t) (g) << 8) | (uint32_t) (b);
 }
 
 // --- Variables to track activity and blink state ---
