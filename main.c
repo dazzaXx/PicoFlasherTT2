@@ -30,7 +30,7 @@
 #include "ws2812.pio.h"
 
 #define WS2812_PIN 16
-#define WS2812_COLOR_TX 255, 60, 0
+#define WS2812_COLOR_TX 255, 30, 0
 #define WS2812_COLOR_RX 0, 255, 0
 #define WS2812_COLOR_IDLE 255, 255, 255
 #define IS_RGBW false
