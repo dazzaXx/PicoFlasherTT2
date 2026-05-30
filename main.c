@@ -30,14 +30,17 @@
 #include "ws2812.pio.h"
 
 #define WS2812_PIN 16
-#define WS2812_COLOR_TX urgb_u32(255, 60, 0)
-#define WS2812_COLOR_RX urgb_u32(0, 255, 0)
-#define WS2812_COLOR_IDLE urgb_u32(255, 255, 255)
+#define WS2812_COLOR_TX 255, 30, 0
+#define WS2812_COLOR_RX 0, 255, 0
+#define WS2812_COLOR_IDLE 255, 255, 255
 #define IS_RGBW false
+
+static PIO ws2812_pio = pio1;
+static uint ws2812_sm = 0;
 
 // Helper function to send RGB values to the PIO
 static inline void put_pixel(uint32_t pixel_grb) {
-    pio_sm_put_blocking(pio0, 0, pixel_grb << 8u);
+    pio_sm_put_blocking(ws2812_pio, ws2812_sm, pixel_grb << 8u);
 }
 
 static inline uint32_t urgb_u32(uint8_t r, uint8_t g, uint8_t b) {
@@ -66,7 +69,7 @@ void ws2812_activity_task(void) {
 
     // 1. Detect if the USB was just plugged in/enumerated by the PC
     if (is_mounted && !was_mounted) {
-        put_pixel(WS2812_COLOR_IDLE); // Set to idle color immediately upon connection
+        put_pixel(urgb_u32(WS2812_COLOR_IDLE)); // Set to idle color immediately upon connection
         was_mounted = true;
     } 
     // Detect if the USB was disconnected (e.g., PC went to sleep)
@@ -83,7 +86,7 @@ void ws2812_activity_task(void) {
     if (is_transferring && (current_time - last_usb_activity_us > 100000)) {
         is_transferring = false;
         led_physical_state = false;
-        put_pixel(WS2812_COLOR_IDLE); // Revert to IDLE color instead of turning OFF
+        put_pixel(urgb_u32(WS2812_COLOR_IDLE)); // Revert to IDLE color instead of turning OFF
         return;
     }
 
@@ -207,7 +210,7 @@ static bool enable_smc_workaround = true;
 
 static void pico_flasher_rx_cb(uint8_t cdc_id)
 {
-	ws2812_trigger_activity(WS2812_COLOR_RX);
+	ws2812_trigger_activity(urgb_u32(WS2812_COLOR_RX));
 	
 	uint32_t avilable_data = tud_cdc_n_available(cdc_id);
 
@@ -466,7 +469,7 @@ void tud_cdc_rx_cb(uint8_t cdc_id)
 void tud_cdc_tx_complete_cb(uint8_t cdc_id)
 {
 	if (cdc_id == CDC_PICO_FLASHER)
-		ws2812_trigger_activity(WS2812_COLOR_TX);
+		ws2812_trigger_activity(urgb_u32(WS2812_COLOR_TX));
 }
 
 void tud_cdc_line_coding_cb(uint8_t cdc_id, const cdc_line_coding_t *line_coding)
@@ -493,10 +496,10 @@ int main(void)
 	uart_bridge_init(CDC_SMC_DBG, uart1, UART1_TX, UART1_RX);
 
 // Initialize the WS2812 PIO
-    PIO pio = pio0;
-    int sm = 0;
-    uint offset = pio_add_program(pio, &ws2812_program);
-    ws2812_program_init(pio, sm, offset, WS2812_PIN, 800000, IS_RGBW);
+    ws2812_pio = pio1;
+    ws2812_sm = pio_claim_unused_sm(ws2812_pio, true);
+    uint offset = pio_add_program(ws2812_pio, &ws2812_program);
+    ws2812_program_init(ws2812_pio, ws2812_sm, offset, WS2812_PIN, 800000, IS_RGBW);
 	
 	while (1)
 	{
