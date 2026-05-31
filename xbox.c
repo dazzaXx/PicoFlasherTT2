@@ -18,6 +18,7 @@
 #include "pico/stdlib.h"
 #include "pins.h"
 #include "spiex.h"
+#include "tusb.h"
 
 void xbox_init()
 {
@@ -99,6 +100,8 @@ static int xbox_nand_wait_ready(uint16_t timeout)
 {
 	do
 	{
+		tud_task();
+		
 		if (!(xbox_nand_get_status() & 0x01))
 			return 0;
 	} while (timeout--);
@@ -259,6 +262,8 @@ static int xbox_emmc_wait_ints(uint32_t value, int timeout_ms)
 	absolute_time_t wait_timeout = make_timeout_time_ms(timeout_ms);
 	do
 	{
+		tud_task();
+		
 		uint32_t ints = xbox_emmc_get_ints();
 		if ((ints & value) == value)
 		{
@@ -282,6 +287,8 @@ int xbox_emmc_init()
 	absolute_time_t init_timeout = make_timeout_time_ms(5000);
 	while (!time_reached(init_timeout))
 	{
+		tud_task();
+		
 		if (spiex_read_reg(0x3C) & 0x1000000)
 			break;
 	}
